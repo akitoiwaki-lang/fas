@@ -4,3 +4,7 @@
 venv/
 __pycache__/
 *.pyc
+
+*.db
+private_uploads/
+backup_before_supabase/
