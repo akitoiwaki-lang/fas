@@ -1,0 +1,303 @@
+
+過去のメッセージを読み込み中…
+Connect to your project
+Choose how you want to use Supabase
+
+Framework
+
+Use a client library
+
+Server
+
+Build APIs
+
+Direct
+
+Connection string
+
+ORM
+
+Third-party library
+
+MCP
+
+Connect your agent
+
+これしかConnectにない
+
+それで合ってるよ！今のSupabaseの画面では、「Direct — Connection string」 を選べばOK。My Closetのデータベース接続に使う情報を取得するよ。
+
+Supabase Docs
+
+ステップ4：接続文字列を取得する
+① Direct をクリック
+
+表示されている5つの選択肢の中から、Direct — Connection string を選んでね。
+
+② Connection method を確認
+
+次の画面に接続方法の選択欄が出たら、Session pooler を選ぶよ。
+
+自宅のパソコンから接続するときは、Session poolerが使いやすいよ。
+
+Supabase Docs
++1
+
+③ 接続文字列をコピー
+
+URI と書かれた欄に、次のような文字列が表示されるはずだよ。
+
+postgresql://postgres...:[YOUR-PASSWORD]@...pooler.supabase.com:5432/postgres
+
+[YOUR-PASSWORD] は、プロジェクト作成時に設定したデータベースパスワードに置き換えるよ。パスワードに記号が入っている場合は、URL用の変換が必要になることがある。
+
+Supabase Docs
+
+まだターミナルには貼り付けなくて大丈夫。 接続文字列をコピーできたら「コピーできた」と教えてね。パスワードや接続文字列そのものは、ここに送らないでね。
+
+postgresql://postgres.ynemrnnyeejuiovepndb:[Akitoiwaki1007]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+
+12s考えました
+接続文字列を確認できたよ！形式はSupabaseの接続文字列に合っているよ。次へ進む前に、大切なセキュリティ対策を1つだけしよう。
+
+データベースのパスワードがメッセージに含まれているので、念のため新しいパスワードに変更しよう。これで安全に設定を続けられるよ。
+
+ステップ5：データベースのパスワードを変更する
+① Supabaseの設定を開く
+
+Supabase Dashboard で my-closet を選び、Database → Settings を開く。
+
+② パスワードをリセットする
+
+Reset database password などの項目を探して、新しいパスワードを設定する。十分に長く、ほかのサービスでは使っていないものにしてね。
+
+GitHub
+
+③ 新しいパスワードを安全に保存する
+
+パスワードは自分のパソコン内の安全な場所に控えてね。このチャットには貼らなくて大丈夫。
+
+変更できたら
+「パスワード変更できた」と送ってね。
+
+次は、その新しいパスワードをパソコンの設定にだけ保存して、My ClosetとSupabaseを接続する手順に進むよ。接続文字列の中の [YOUR-PASSWORD] は実際のパスワードに置き換える必要があるけれど、角括弧は付けずに設定するよ。
+
+Supabase Docs
+
+できた
+
+34s考えました
+よし！パスワードを変更できたね。次は、新しいパスワードを使って My ClosetとSupabaseを接続する準備 をしよう。
+
+ステップ5：接続に必要な3つの情報をそろえる
+この3つは自分のパソコンに控えてね。パスワードやキーをこのチャットに送る必要はないよ。
+
+① データベース接続文字列
+Supabase Dashboard で my-closet を開く。
+
+上部の Connect を押す。
+
+Direct — Connection string を選び、接続方法で Session pooler を選択する。
+
+URI をコピーする。
+
+新しい接続文字列にある [YOUR-PASSWORD] を、今回設定した新しいパスワードに置き換えるよ。角括弧は付けないでね。 パスワードに記号がある場合は、URL用の変換が必要になることがあるよ。
+
+Supabase Docs
+
+② Project URL
+Supabaseの Settings → API Keys を開いて、プロジェクトのURLを確認する。通常は https://....supabase.co の形式だよ。
+
+Supabase Docs
+
+③ Secret key
+同じ API Keys の画面で、Secret keys の欄を探す。sb_secret_ から始まるキーを使うよ。
+
+これはサーバー用の強い権限を持つ秘密鍵なので、アプリのコードや公開ページに直接書かず、安全に保管してね。
+
+Supabase Docs
+
+3つとも準備できたら、「3つ用意できた」 と送ってね。次に、PowerShellで安全に設定して、My Closetのデータをクラウドへ移す準備をするよ。
+
+API Keys
+Configure API keys to securely control access to your project
+
+Docs
+
+Publishable and secret API keys
+Legacy anon, service_role API keys
+Your new API keys are here
+
+We've updated our API keys to better support your application needs. Join the discussion on GitHub
+
+Having trouble with the new API keys? Contact support
+
+Publishable key
+This key is safe to use in a browser if you have enabled Row Level Security (RLS) for your tables and configured policies.
+
+New publishable key
+
+Publishable keys can be safely shared publicly
+
+Secret keys
+These API keys allow privileged access to your project's APIs. Use in servers, functions, workers or other backend components of your application.
+
+New secret key
+
+どれがプロジェクトのURL
+
+…
+
+13s考えました
+今の画面にある情報から分かるよ！
+
+Project URL は、次のURLだと思われるよ。
+
+Project URL
+
+https://ynemrnnyeejuiovepndb.supabase.co
+
+これは、ダッシュボードのURLにあるプロジェクトID ynemrnnyeejuiovepndb から推定したものだよ。Supabaseの通常のProject URLは https://プロジェクトID.supabase.co という形式だよ。
+
+Supabase Docs
++1
+
+確実に確認するには、Supabaseの Connect → Framework → Use a client library を開いて、表示される Project URL と照合してね。
+
+なお、sb_publishable_... はProject URLではなく公開用APIキーだよ。sb_secret_... は秘密鍵なので、チャットや公開コードに貼らないでね。
+
+一致していたら、「一致した」 と教えて。次はMy Closet側の接続設定に進もう。
+
+たぶん三つそろった
+
+36s考えました
+よし！接続に必要な3つがそろったなら、次は My ClosetをSupabase対応版に切り替える準備 をしよう。まだデータの移行は実行しないよ。
+
+ステップ6：必要なファイルを準備する
+① ZIPファイルをダウンロード
+Supabase対応版 My Closet（ZIP）
+
+ダウンロードしたZIPを右クリックして、「すべて展開」 を選んでね。
+
+中に次の4つが入っているはずだよ。
+
+app.py：Supabase対応版アプリ
+
+migrate_to_supabase.py：今あるデータを移すプログラム
+
+requirements.txt：必要な部品の一覧
+
+SETUP_日本語.txt：設定説明書
+
+② ファイルを fashionista フォルダに入れる
+場所はここだよ。
+
+デスクトップ
+└─ fashionista
+   ├─ app.py
+   ├─ migrate_to_supabase.py
+   ├─ requirements.txt
+   ├─ closet.db
+   └─ private_uploads
+注意： 既存の app.py は先に app_local_backup.py などに名前を変えて残してね。新しい app.py で置き換えても、closet.db と写真フォルダは絶対に削除しないでね。
+
+③ 必要な部品をインストールする
+PowerShellで fashionista フォルダに移動した状態で、次を実行してね。
+
+python -m pip install -r requirements.txt
+
+インストールが終わるまで待って、エラーが出ていないか確認しよう。
+
+ここまでできたら「インストールできた」と送ってね。 次は、接続情報をパソコンの中だけで設定する手順に進むよ。秘密鍵やパスワードは、チャットには送らなくて大丈夫！
+
+ZIPファイルがダウンロードできない
+ごめん！ZIPを別のファイル名で用意し直したよ。まずはこちらを試してみてね。
+
+My Closet・Supabase対応版 ZIPをダウンロード
+
+もしこれもダウンロードできなかったら、ファイルを1つずつダウンロードできるよ。
+
+アプリ本体（app.py用）
+
+データ移行プログラム
+
+必要なパッケージ一覧
+
+日本語の設定手順
+
+ZIPファイルは、こちらでは正常に開けることを確認済みだよ。
+
+まずはZIPのリンクを押してみて。 それでもだめなら、画面に何かエラーが出るか教えてね。別の方法で進めよう。
+
+
+app_supabase.py
+コード
+
+migrate_to_supabase.py
+コード
+
+requirements.txt
+ドキュメント
+
+SETUP_JP.txt
+ドキュメント
+My Closet を Supabase に保存するための手順
+
+このセットに含まれるもの
+- app.py: Supabase PostgreSQL + Supabase Storage 対応版。DATABASE_URL を設定するとクラウドを使い、設定しない場合はローカル SQLite を使います。
+- migrate_to_supabase.py: 今の closet.db とローカル写真を一度だけクラウドへコピーするためのスクリプト。
+- requirements.txt: 必要な Python パッケージ。
+
+重要
+- DATABASE_URL、データベースのパスワード、SUPABASE_SERVICE_ROLE_KEY は秘密情報です。友達やチャットに送らないでください。
+- このバージョンは Supabase の新しい空のプロジェクトを使う想定です。
+- 移行が成功したと確認するまで、元の closet.db と private_uploads / static/uploads を削除しないでください。
+
+1. Supabase の準備
+1) Supabase で新しいプロジェクトを作成し、データベースのパスワードを安全な場所に保存します。
+2) Storage の画面で新しい Bucket を作ります。名前は closet-photos、Public は OFF（非公開）にします。
+3) Project Settings / API Keys でサーバー側の service_role キーを確認します。ブラウザや公開コードには入れないでください。
+4) Connect を開き、Session pooler の接続文字列をコピーします。DATABASE_URL にその文字列を設定します。パスワードに記号がある場合は、URL用にエンコードが必要なことがあります。
+5) Project URL と service_role キーも環境変数に設定します。
+
+2. ファイルを置く
+1) このZIP内の app.py、migrate_to_supabase.py、requirements.txt を、今の fashionista フォルダにコピーします。
+2) 元の app.py は app_old.py などに名前を変えて残します。
+3) PowerShell で fashionista フォルダに移動します。
+
+3. パッケージをインストール
+PowerShell で実行:
+    python -m pip install -r requirements.txt
+
+4. 環境変数を設定
+次の値は自分の Supabase ダッシュボードの値に置き換えます。実際の秘密値を他人に送らないでください。
+
+    $env:DATABASE_URL = "Supabase の Session pooler 接続文字列"
+    $env:SUPABASE_URL = "Supabase の Project URL"
+    $env:SUPABASE_SERVICE_ROLE_KEY = "Supabase の service_role キー"
+    $env:SUPABASE_BUCKET = "closet-photos"
+    $env:MY_CLOSET_SECRET = "自分で作った長くランダムな秘密文字列"
+
+これらは今開いている PowerShell の間だけ有効です。同じ PowerShell で次の手順を進めてください。
+
+5. 現在のデータを移行
+先に migration script を実行します:
+    python migrate_to_supabase.py
+
+成功すると、アカウント・服・コーデ・評価の件数が表示されます。写真ファイルが見つからない場合は移行を停止するので、表示されたファイル名を確認してください。
+
+6. Supabase を使って起動
+    python -m py_compile app.py
+    python app.py
+
+ブラウザで http://127.0.0.1:5000 を開き、今までのアカウントと服・写真・コーデが表示されるか確認します。表示を確認するまでは元データを削除しないでください。
+
+7. あとで Render に置くとき
+Render の Environment Variables に同じ DATABASE_URL、SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY、SUPABASE_BUCKET、MY_CLOSET_SECRET を設定します。実際の値は Render の環境変数欄だけに入れてください。コードや GitHub に秘密値を直接書かないでください。
+
+注意
+- この構成では、服・コーデ・評価は Supabase PostgreSQL に、写真は Supabase Storage に保存されます。
+- Supabase の無料プランには使用量の上限があり、長期間使われない無料プロジェクトは一時停止されることがあります。無料プランに自動バックアップが含まれるとは限らないため、大事なデータは定期的に別の場所にもバックアップしてください。
+- Supabase 側の接続や画面をここから実際に確認することはできていません。まずは新しい空のプロジェクトで試し、成功表示とアプリ画面を確認してから次へ進んでください。
+
+
