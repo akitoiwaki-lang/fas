@@ -259,7 +259,7 @@ def init_db():
             )""") 
             return
 
-with connect_db() as conn:
+    with connect_db() as conn:
         conn.execute("""CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT NOT NULL UNIQUE,
