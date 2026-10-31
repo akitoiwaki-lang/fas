@@ -40,6 +40,9 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get("MY_CLOSET_SECRET") or secrets.token_hex(32)
 
+# 起動確認：Render がこの app.py を読み込んだときに必ずログへ出します。
+print("[STARTUP] MY CLOSET app.py loaded", flush=True)
+
 
 # ------------------------------------------------------------
 # Performance diagnostics
