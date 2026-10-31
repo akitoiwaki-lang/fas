@@ -55,12 +55,10 @@ def _log_request_timer(response):
     started = getattr(g, "request_started_at", None)
     if started is not None:
         elapsed = time.perf_counter() - started
-        app.logger.info(
-            "[PERFORMANCE] %s %s status=%s total=%.3fs",
-            request.method,
-            request.path,
-            response.status_code,
-            elapsed,
+        print(
+            f"[PERFORMANCE] {request.method} {request.path} "
+            f"status={response.status_code} total={elapsed:.3f}s",
+            flush=True,
         )
     return response
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB per request
@@ -210,7 +208,7 @@ def connect_db():
     db_connect_started = time.perf_counter()
     conn = psycopg.connect(url, row_factory=dict_row)
     db_connect_elapsed = time.perf_counter() - db_connect_started
-    app.logger.info("[DB_CONNECT] postgres connect=%.3fs", db_connect_elapsed)
+    print(f"[DB_CONNECT] postgres connect={db_connect_elapsed:.3f}s", flush=True)
     try:
         yield PostgresConnection(conn)
         conn.commit()
