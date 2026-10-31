@@ -36,7 +36,6 @@ from werkzeug.utils import secure_filename
 load_dotenv()
 
 app = Flask(__name__)
-app = Flask(__name__)
 app.secret_key = os.environ.get("MY_CLOSET_SECRET") or secrets.token_hex(32)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB per request
 
@@ -310,6 +309,32 @@ def init_db():
             FOREIGN KEY(outfit_id) REFERENCES outfits(id) ON DELETE CASCADE,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS rooms (
+            room_code TEXT PRIMARY KEY,
+            room_name TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            owner_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS room_members (
+            room_code TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(room_code, user_id),
+            FOREIGN KEY(room_code) REFERENCES rooms(room_code) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS room_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            room_code TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            message TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(room_code) REFERENCES rooms(room_code) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )""")
+
         images = conn.execute("SELECT DISTINCT image FROM clothing_items").fetchall()
         for row in images:
             filename = Path(row["image"]).name
@@ -386,6 +411,23 @@ def is_room_member(room_code, user_id):
         ).fetchone()
 
     return member is not None
+
+def can_view_owner(owner_id, viewer_id):
+    """Allow owners, explicitly authorized friends, and shared-room members to view."""
+    if owner_id is None or viewer_id is None:
+        return False
+    if str(owner_id) == str(viewer_id):
+        return True
+    if has_view_access(owner_id):
+        return True
+    with connect_db() as conn:
+        shared_room = conn.execute(
+            """SELECT 1 FROM room_members mine
+               JOIN room_members theirs ON mine.room_code=theirs.room_code
+               WHERE mine.user_id=? AND theirs.user_id=? LIMIT 1""",
+            (viewer_id, owner_id),
+        ).fetchone()
+    return shared_room is not None
 
 def can_view_outfit(outfit, user):
     return (
@@ -1631,36 +1673,7 @@ def too_large(_error):
 
 # Create tables when the app starts.
 init_db()
-with connect_db() as conn:
-    conn.execute("""CREATE TABLE IF NOT EXISTS rooms (
-    room_code TEXT PRIMARY KEY,
-    room_name TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    owner_id INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
-)""")
-
-    conn.execute("""CREATE TABLE IF NOT EXISTS room_members (
-    room_code TEXT NOT NULL,
-    user_id INTEGER NOT NULL,
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY(room_code, user_id),
-    FOREIGN KEY(room_code) REFERENCES rooms(room_code) ON DELETE CASCADE,
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-)""")
-
-    conn.execute("""CREATE TABLE IF NOT EXISTS room_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_code TEXT NOT NULL,
-    user_id INTEGER NOT NULL,
-    message TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(room_code) REFERENCES rooms(room_code) ON DELETE CASCADE,
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-)""")
 
 if __name__ == "__main__":
     # Local development only. For public hosting, use a production WSGI server.
     app.run(debug=False)
-
