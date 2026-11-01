@@ -7,11 +7,13 @@ import mimetypes
 import os
 import secrets
 import sqlite3
+import time
 import uuid
 
 from flask import (
     Flask,
     abort,
+    g,
     redirect,
     render_template_string,
     request,
@@ -36,8 +38,29 @@ from werkzeug.utils import secure_filename
 load_dotenv()
 
 app = Flask(__name__)
-app = Flask(__name__)
 app.secret_key = os.environ.get("MY_CLOSET_SECRET") or secrets.token_hex(32)
+
+
+# ------------------------------------------------------------
+# Performance diagnostics
+# Render Logs に各リクエストの処理時間を出力します。
+# ------------------------------------------------------------
+@app.before_request
+def _start_request_timer():
+    g.request_started_at = time.perf_counter()
+
+
+@app.after_request
+def _log_request_timer(response):
+    started = getattr(g, "request_started_at", None)
+    if started is not None:
+        elapsed = time.perf_counter() - started
+        print(
+            f"[PERFORMANCE] {request.method} {request.path} "
+            f"status={response.status_code} total={elapsed:.3f}s",
+            flush=True,
+        )
+    return response
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB per request
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -182,7 +205,10 @@ def connect_db():
         url = "postgresql://" + url[len("postgres://"):]
     if "sslmode=" not in url:
         url += "&sslmode=require" if "?" in url else "?sslmode=require"
+    db_connect_started = time.perf_counter()
     conn = psycopg.connect(url, row_factory=dict_row)
+    db_connect_elapsed = time.perf_counter() - db_connect_started
+    print(f"[DB_CONNECT] postgres connect={db_connect_elapsed:.3f}s", flush=True)
     try:
         yield PostgresConnection(conn)
         conn.commit()
@@ -259,7 +285,7 @@ def init_db():
             )""") 
             return
 
-with connect_db() as conn:
+    with connect_db() as conn:
         conn.execute("""CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT NOT NULL UNIQUE,
@@ -310,6 +336,32 @@ with connect_db() as conn:
             FOREIGN KEY(outfit_id) REFERENCES outfits(id) ON DELETE CASCADE,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS rooms (
+            room_code TEXT PRIMARY KEY,
+            room_name TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            owner_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS room_members (
+            room_code TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(room_code, user_id),
+            FOREIGN KEY(room_code) REFERENCES rooms(room_code) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS room_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            room_code TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            message TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(room_code) REFERENCES rooms(room_code) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )""")
+
         images = conn.execute("SELECT DISTINCT image FROM clothing_items").fetchall()
         for row in images:
             filename = Path(row["image"]).name
@@ -386,6 +438,23 @@ def is_room_member(room_code, user_id):
         ).fetchone()
 
     return member is not None
+
+def can_view_owner(owner_id, viewer_id):
+    """Allow owners, explicitly authorized friends, and shared-room members to view."""
+    if owner_id is None or viewer_id is None:
+        return False
+    if str(owner_id) == str(viewer_id):
+        return True
+    if has_view_access(owner_id):
+        return True
+    with connect_db() as conn:
+        shared_room = conn.execute(
+            """SELECT 1 FROM room_members mine
+               JOIN room_members theirs ON mine.room_code=theirs.room_code
+               WHERE mine.user_id=? AND theirs.user_id=? LIMIT 1""",
+            (viewer_id, owner_id),
+        ).fetchone()
+    return shared_room is not None
 
 def can_view_outfit(outfit, user):
     return (
@@ -1631,36 +1700,7 @@ def too_large(_error):
 
 # Create tables when the app starts.
 init_db()
-with connect_db() as conn:
-    conn.execute("""CREATE TABLE IF NOT EXISTS rooms (
-    room_code TEXT PRIMARY KEY,
-    room_name TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    owner_id INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
-)""")
-
-    conn.execute("""CREATE TABLE IF NOT EXISTS room_members (
-    room_code TEXT NOT NULL,
-    user_id INTEGER NOT NULL,
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY(room_code, user_id),
-    FOREIGN KEY(room_code) REFERENCES rooms(room_code) ON DELETE CASCADE,
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-)""")
-
-    conn.execute("""CREATE TABLE IF NOT EXISTS room_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_code TEXT NOT NULL,
-    user_id INTEGER NOT NULL,
-    message TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(room_code) REFERENCES rooms(room_code) ON DELETE CASCADE,
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-)""")
 
 if __name__ == "__main__":
     # Local development only. For public hosting, use a production WSGI server.
     app.run(debug=False)
-
