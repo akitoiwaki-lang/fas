@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 
 from io import BytesIO
+from functools import lru_cache
 
 import mimetypes
 
@@ -28,7 +29,6 @@ from flask import (
 
     redirect,
 
-    render_template_string,
 
     request,
 
@@ -70,8 +70,6 @@ from werkzeug.utils import secure_filename
 load_dotenv()
 
 
-
-app = Flask(__name__)
 
 app = Flask(__name__)
 
@@ -269,58 +267,55 @@ hr { border: 0; border-top: 1px solid #e5e5e5; margin: 18px 0; }
 
 
 
-def page(page_title, body, **context):
+@lru_cache(maxsize=128)
+def _compiled_body_template(source):
+    """Compile each page body once instead of recompiling it on every visit."""
+    return app.jinja_env.from_string(source)
 
-    """Render a complete page using a shared layout."""
 
-    template = """
-
-    <!doctype html>
-
-    <html lang="ja">
-
-    <head>
-
-      <meta charset="utf-8">
-
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-
-      <title>{{ page_title }}</title>
-
-    """ + STYLE + """
-
-    </head>
-
-    <body>
-
-      <header><h1>MY CLOSET</h1><p>{{ page_title }}</p></header>
-
-      <main>{{ body|safe }}</main>
-
-      <script>
-      // Show a local preview immediately after taking or selecting a photo.
-      document.addEventListener("change", function (event) {
-        const input = event.target;
-        if (!input.matches("input[data-photo-preview]")) return;
-        const preview = document.getElementById(input.dataset.photoPreview);
-        if (!preview || !input.files || !input.files[0]) return;
-        if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
-        const objectUrl = URL.createObjectURL(input.files[0]);
-        preview.dataset.objectUrl = objectUrl;
-        preview.src = objectUrl;
-        preview.hidden = false;
-        preview.style.display = "block";
+_PAGE_TEMPLATE = app.jinja_env.from_string("""
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }}</title>
+""" + STYLE + """
+</head>
+<body>
+  <header><h1>MY CLOSET</h1><p>{{ page_title }}</p></header>
+  <main>{{ body|safe }}</main>
+  <script>
+  // Preview photos locally without uploading them first.
+  document.addEventListener("change", function (event) {
+    const input = event.target;
+    if (!input.matches("input[data-photo-preview]")) return;
+    const form = input.form;
+    if (form) {
+      form.querySelectorAll("input[data-photo-preview]").forEach(function (other) {
+        if (other !== input) other.value = "";
       });
-      </script>
+    }
+    const preview = document.getElementById(input.dataset.photoPreview);
+    if (!preview || !input.files || !input.files[0]) return;
+    if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
+    const objectUrl = URL.createObjectURL(input.files[0]);
+    preview.dataset.objectUrl = objectUrl;
+    preview.src = objectUrl;
+    preview.hidden = false;
+    preview.style.display = "block";
+  });
 
-    </body>
+  </script>
+</body>
+</html>
+""")
 
-    </html>
 
-    """
-
-    return render_template_string(template, page_title=page_title, body=render_template_string(body, **context))
-
+def page(page_title, body, **context):
+    """Render a complete page using cached Jinja templates."""
+    rendered_body = _compiled_body_template(body).render(**context)
+    return _PAGE_TEMPLATE.render(page_title=page_title, body=rendered_body)
 
 
 class PostgresCursor:
@@ -985,9 +980,12 @@ def index():
         <label>服の名前</label><input type="text" name="title" maxlength="100" required>
 
         <label>写真（10MB以下）</label>
-        <p class="muted">スマホならカメラを起動して撮影できます。撮影後、ここにプレビューが表示されます。</p>
-        <input type="file" name="photo" accept="image/*" capture="environment" data-photo-preview="new-photo-preview" required>
-        <img id="new-photo-preview" alt="選択した写真のプレビュー" hidden style="max-width:100%;max-height:300px;object-fit:contain;margin:10px 0;">
+        <p class="muted">写真ファイルから選ぶか、その場でカメラ撮影できます。</p>
+        <label>写真ファイルから選ぶ</label>
+        <input type="file" name="photo" accept="image/*" data-photo-preview="new-photo-preview">
+        <label>カメラで撮影する</label>
+        <input type="file" name="photo_camera" accept="image/*" capture="environment" data-photo-preview="new-photo-preview">
+        <img loading="lazy" decoding="async" id="new-photo-preview" alt="選択した写真のプレビュー" hidden style="max-width:100%;max-height:300px;object-fit:contain;margin:10px 0;">
 
         <button type="submit">服を登録</button>
 
@@ -1003,7 +1001,7 @@ def index():
 
       <article class="card">
 
-        <img src="{{ url_for('photo', item_id=item['id']) }}" alt="{{ item['title'] }}">
+        <img loading="lazy" decoding="async" src="{{ url_for('photo', item_id=item['id']) }}" alt="{{ item['title'] }}">
 
         <h3>{{ item['title'] }}</h3>
 
@@ -1235,7 +1233,7 @@ def photo(item_id):
 
         mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
-        response = send_file(BytesIO(image_data), mimetype=mimetype, download_name=filename, max_age=0)
+        response = send_file(BytesIO(image_data), mimetype=mimetype, download_name=filename, max_age=300)
 
     else:
 
@@ -1251,9 +1249,9 @@ def photo(item_id):
 
             abort(404)
 
-        response = send_from_directory(PRIVATE_UPLOADS, filename, max_age=0)
+        response = send_from_directory(PRIVATE_UPLOADS, filename, max_age=300)
 
-    response.headers["Cache-Control"] = "no-store"
+    response.headers["Cache-Control"] = "private, max-age=300"
 
     return response
 
@@ -1394,6 +1392,8 @@ def add():
     title = request.form.get("title", "").strip()
 
     photo_file = request.files.get("photo")
+    if not photo_file or not photo_file.filename:
+        photo_file = request.files.get("photo_camera")
 
     if not title or len(title) > 100 or not photo_file or not photo_file.filename:
 
@@ -1458,6 +1458,8 @@ def edit(item_id):
         title = request.form.get("title", "").strip()
 
         photo_file = request.files.get("photo")
+        if not photo_file or not photo_file.filename:
+            photo_file = request.files.get("photo_camera")
 
         if not title or len(title) > 100:
 
@@ -1519,16 +1521,19 @@ def edit(item_id):
 
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
-      <img style="width:100%;max-height:330px;object-fit:contain" src="{{ url_for('photo', item_id=item['id']) }}" alt="{{ item['title'] }}">
+      <img loading="lazy" decoding="async" style="width:100%;max-height:330px;object-fit:contain" src="{{ url_for('photo', item_id=item['id']) }}" alt="{{ item['title'] }}">
 
       <form method="post" enctype="multipart/form-data">
 
         <label>服の名前</label><input type="text" name="title" value="{{ item['title'] }}" maxlength="100" required>
 
         <label>写真（変更する場合のみ選択）</label>
-        <p class="muted">スマホならカメラで撮影できます。新しい写真を選ぶとプレビューが切り替わります。</p>
-        <input type="file" name="photo" accept="image/*" capture="environment" data-photo-preview="edit-photo-preview">
-        <img id="edit-photo-preview" src="{{ url_for('photo', item_id=item['id']) }}" alt="写真のプレビュー" style="display:block;max-width:100%;max-height:300px;object-fit:contain;margin:10px 0;">
+        <p class="muted">写真ファイルから選ぶか、その場でカメラ撮影できます。</p>
+        <label>写真ファイルから選ぶ</label>
+        <input type="file" name="photo" accept="image/*" data-photo-preview="edit-photo-preview">
+        <label>カメラで撮影する</label>
+        <input type="file" name="photo_camera" accept="image/*" capture="environment" data-photo-preview="edit-photo-preview">
+        <img loading="lazy" decoding="async" id="edit-photo-preview" src="{{ url_for('photo', item_id=item['id']) }}" alt="写真のプレビュー" style="display:block;max-width:100%;max-height:300px;object-fit:contain;margin:10px 0;">
 
         <button type="submit">変更を保存</button>
 
@@ -1772,7 +1777,7 @@ def outfit_new():
 
             <input type="checkbox" name="item_ids" value="{{ item['id'] }}" {% if item['id'] in selected_ids %}checked{% endif %}>
 
-            <img src="{{ url_for('photo', item_id=item['id']) }}" alt="{{ item['title'] }}">
+            <img loading="lazy" decoding="async" src="{{ url_for('photo', item_id=item['id']) }}" alt="{{ item['title'] }}">
 
             <div>{{ item['title'] }}</div>
 
@@ -1884,7 +1889,7 @@ def outfit_feed():
 
         <div class="outfit-items">
 
-          {% for item in card['items'] %}<div><img src="{{ url_for('photo', item_id=item['id']) }}" alt="{{ item['title'] }}"><p>{{ item['title'] }}</p></div>{% endfor %}
+          {% for item in card['items'] %}<div><img loading="lazy" decoding="async" src="{{ url_for('photo', item_id=item['id']) }}" alt="{{ item['title'] }}"><p>{{ item['title'] }}</p></div>{% endfor %}
 
         </div>
 
@@ -2042,7 +2047,7 @@ def outfit_detail(outfit_id):
 
       <div class="outfit-items">
 
-        {% for item in items %}<div><img src="{{ url_for('photo', item_id=item['id']) }}" alt="{{ item['title'] }}"><p>{{ item['title'] }}</p></div>{% endfor %}
+        {% for item in items %}<div><img loading="lazy" decoding="async" src="{{ url_for('photo', item_id=item['id']) }}" alt="{{ item['title'] }}"><p>{{ item['title'] }}</p></div>{% endfor %}
 
       </div>
 
@@ -2960,7 +2965,7 @@ def room_detail(room_code):
 
 
 
-            <img src="{{ url_for('photo', item_id=item['id']) }}"
+            <img loading="lazy" decoding="async" src="{{ url_for('photo', item_id=item['id']) }}"
 
                  alt="{{ item['title'] }}">
 
