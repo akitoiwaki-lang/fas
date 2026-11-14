@@ -292,18 +292,7 @@ _PAGE_TEMPLATE = app.jinja_env.from_string("""
   <header><h1>MY CLOSET</h1><p>{{ page_title }}</p></header>
   <main>{{ body|safe }}</main>
   <script>
-  // Let the user choose exactly one photo source, then preview it locally.
-  document.addEventListener("click", function (event) {
-    const choice = event.target.closest("label[data-photo-choice]");
-    if (!choice) return;
-    const form = choice.closest("form");
-    if (!form) return;
-    const selectedInput = document.getElementById(choice.htmlFor);
-    form.querySelectorAll("input[data-photo-preview]").forEach(function (other) {
-      if (other !== selectedInput) other.value = "";
-    });
-  });
-
+  // Preview the selected photo locally before uploading.
   document.addEventListener("change", function (event) {
     const input = event.target;
     if (!input.matches("input[data-photo-preview]")) return;
@@ -1005,24 +994,11 @@ def index():
         <label>服の名前</label><input type="text" name="title" maxlength="100" required>
 
         <label>写真（10MB以下）</label>
-        <p class="muted">追加方法を選んでください。</p>
-        <div class="photo-choices">
-          <label class="photo-choice" for="new-photo-camera" data-photo-choice>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h-4l-1.5 2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.5L14 4Z"/><circle cx="12" cy="12.5" r="3.2"/></svg>
-            カメラ
-          </label>
-          <label class="photo-choice" for="new-photo-gallery" data-photo-choice>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-            写真
-          </label>
-          <label class="photo-choice" for="new-photo-file" data-photo-choice>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>
-            ファイル
-          </label>
-        </div>
-        <input class="photo-input" id="new-photo-camera" type="file" name="photo" accept="image/*" capture="environment" data-photo-preview="new-photo-preview">
-        <input class="photo-input" id="new-photo-gallery" type="file" name="photo" accept="image/*" data-photo-preview="new-photo-preview">
-        <input class="photo-input" id="new-photo-file" type="file" name="photo" accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" data-photo-preview="new-photo-preview">
+        <label class="photo-choice" for="new-photo-input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          写真
+        </label>
+        <input class="photo-input" id="new-photo-input" type="file" name="photo" accept="image/*" data-photo-preview="new-photo-preview">
         <img loading="lazy" decoding="async" id="new-photo-preview" alt="選択した写真のプレビュー" hidden style="max-width:100%;max-height:300px;object-fit:contain;margin:10px 0;">
 
         <button type="submit">服を登録</button>
@@ -1562,24 +1538,11 @@ def edit(item_id):
         <label>服の名前</label><input type="text" name="title" value="{{ item['title'] }}" maxlength="100" required>
 
         <label>写真（変更する場合のみ選択）</label>
-        <p class="muted">追加方法を選んでください。</p>
-        <div class="photo-choices">
-          <label class="photo-choice" for="edit-photo-camera" data-photo-choice>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h-4l-1.5 2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.5L14 4Z"/><circle cx="12" cy="12.5" r="3.2"/></svg>
-            カメラ
-          </label>
-          <label class="photo-choice" for="edit-photo-gallery" data-photo-choice>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-            写真
-          </label>
-          <label class="photo-choice" for="edit-photo-file" data-photo-choice>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>
-            ファイル
-          </label>
-        </div>
-        <input class="photo-input" id="edit-photo-camera" type="file" name="photo" accept="image/*" capture="environment" data-photo-preview="edit-photo-preview">
-        <input class="photo-input" id="edit-photo-gallery" type="file" name="photo" accept="image/*" data-photo-preview="edit-photo-preview">
-        <input class="photo-input" id="edit-photo-file" type="file" name="photo" accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" data-photo-preview="edit-photo-preview">
+        <label class="photo-choice" for="edit-photo-input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          写真
+        </label>
+        <input class="photo-input" id="edit-photo-input" type="file" name="photo" accept="image/*" data-photo-preview="edit-photo-preview">
         <img loading="lazy" decoding="async" id="edit-photo-preview" src="{{ url_for('photo', item_id=item['id']) }}" alt="写真のプレビュー" style="display:block;max-width:100%;max-height:300px;object-fit:contain;margin:10px 0;">
 
         <button type="submit">変更を保存</button>
