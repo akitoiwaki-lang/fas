@@ -297,6 +297,22 @@ def page(page_title, body, **context):
 
       <main>{{ body|safe }}</main>
 
+      <script>
+      // Show a local preview immediately after taking or selecting a photo.
+      document.addEventListener("change", function (event) {
+        const input = event.target;
+        if (!input.matches("input[data-photo-preview]")) return;
+        const preview = document.getElementById(input.dataset.photoPreview);
+        if (!preview || !input.files || !input.files[0]) return;
+        if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
+        const objectUrl = URL.createObjectURL(input.files[0]);
+        preview.dataset.objectUrl = objectUrl;
+        preview.src = objectUrl;
+        preview.hidden = false;
+        preview.style.display = "block";
+      });
+      </script>
+
     </body>
 
     </html>
@@ -968,7 +984,10 @@ def index():
 
         <label>服の名前</label><input type="text" name="title" maxlength="100" required>
 
-        <label>写真（10MB以下）</label><input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp,.gif" required>
+        <label>写真（10MB以下）</label>
+        <p class="muted">スマホならカメラを起動して撮影できます。撮影後、ここにプレビューが表示されます。</p>
+        <input type="file" name="photo" accept="image/*" capture="environment" data-photo-preview="new-photo-preview" required>
+        <img id="new-photo-preview" alt="選択した写真のプレビュー" hidden style="max-width:100%;max-height:300px;object-fit:contain;margin:10px 0;">
 
         <button type="submit">服を登録</button>
 
@@ -1506,7 +1525,10 @@ def edit(item_id):
 
         <label>服の名前</label><input type="text" name="title" value="{{ item['title'] }}" maxlength="100" required>
 
-        <label>写真（変更する場合のみ選択）</label><input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp,.gif">
+        <label>写真（変更する場合のみ選択）</label>
+        <p class="muted">スマホならカメラで撮影できます。新しい写真を選ぶとプレビューが切り替わります。</p>
+        <input type="file" name="photo" accept="image/*" capture="environment" data-photo-preview="edit-photo-preview">
+        <img id="edit-photo-preview" src="{{ url_for('photo', item_id=item['id']) }}" alt="写真のプレビュー" style="display:block;max-width:100%;max-height:300px;object-fit:contain;margin:10px 0;">
 
         <button type="submit">変更を保存</button>
 
