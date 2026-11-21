@@ -40,7 +40,9 @@ from flask import (
 
     send_file,
 
-    jsonify
+    jsonify,
+    g,
+    has_request_context
 
 )
 
@@ -73,11 +75,18 @@ load_dotenv()
 
 app = Flask(__name__)
 
-app = Flask(__name__)
-
 app.secret_key = os.environ.get("MY_CLOSET_SECRET") or secrets.token_hex(32)
 
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB per request
+
+
+@app.teardown_appcontext
+def close_request_database_connection(_error=None):
+    """Close the PostgreSQL connection once the request has finished."""
+    if USE_EXTERNAL_DB:
+        conn = g.pop("_postgres_connection", None)
+        if conn is not None:
+            conn.close()
 
 
 
@@ -417,31 +426,33 @@ def connect_db():
 
     url = DATABASE_URL
 
-    if url.startswith("postgres\://"):
+    if url.startswith("postgres://"):
 
-        url = "postgresql://" + url[len("postgres\://"):]
+        url = "postgresql://" + url[len("postgres://"):]
 
     if "sslmode=" not in url:
 
         url += "&sslmode=require" if "?" in url else "?sslmode=require"
 
-    conn = psycopg.connect(url, row_factory=dict_row)
+    # Reuse one PostgreSQL connection during a single HTTP request.
+    request_scoped = has_request_context()
+    conn = getattr(g, "_postgres_connection", None) if request_scoped else None
+    created_here = conn is None
+
+    if created_here:
+        conn = psycopg.connect(url, row_factory=dict_row)
+        if request_scoped:
+            g._postgres_connection = conn
 
     try:
-
         yield PostgresConnection(conn)
-
         conn.commit()
-
     except Exception:
-
         conn.rollback()
-
         raise
-
     finally:
-
-        conn.close()
+        if created_here and not request_scoped:
+            conn.close()
 
 
 
@@ -578,7 +589,7 @@ def init_db():
 
 
 
-with connect_db() as conn:
+    with connect_db() as conn:
 
         conn.execute("""CREATE TABLE IF NOT EXISTS users (
 
@@ -912,43 +923,55 @@ def get_outfit_items(outfit_id):
 
 
 def build_outfit_cards(outfits, viewer_id):
+    """Build outfit cards with a fixed number of bulk queries, not N+1 queries."""
+    if not outfits:
+        return []
+
+    outfit_ids = [outfit["id"] for outfit in outfits]
+    placeholders = ",".join("?" for _ in outfit_ids)
+
+    with connect_db() as conn:
+        item_rows = conn.execute(
+            f"""SELECT oi.outfit_id, ci.id, ci.title
+                FROM outfit_items oi
+                JOIN clothing_items ci ON ci.id=oi.item_id
+                WHERE oi.outfit_id IN ({placeholders})
+                ORDER BY oi.outfit_id, oi.position, ci.created_at""",
+            outfit_ids,
+        ).fetchall()
+
+        rating_rows = conn.execute(
+            f"""SELECT outfit_id, AVG(stars) AS average, COUNT(*) AS count
+                FROM outfit_ratings
+                WHERE outfit_id IN ({placeholders})
+                GROUP BY outfit_id""",
+            outfit_ids,
+        ).fetchall()
+
+        my_rating_rows = conn.execute(
+            f"""SELECT outfit_id, stars, comment
+                FROM outfit_ratings
+                WHERE user_id=? AND outfit_id IN ({placeholders})""",
+            [viewer_id, *outfit_ids],
+        ).fetchall()
+
+    items_by_outfit = {outfit_id: [] for outfit_id in outfit_ids}
+    for row in item_rows:
+        items_by_outfit[row["outfit_id"]].append(row)
+
+    ratings_by_outfit = {row["outfit_id"]: row for row in rating_rows}
+    my_ratings_by_outfit = {row["outfit_id"]: row for row in my_rating_rows}
 
     cards = []
-
     for outfit in outfits:
-
-        items = get_outfit_items(outfit["id"])
-
-        with connect_db() as conn:
-
-            rating_info = conn.execute(
-
-                "SELECT AVG(stars) AS average, COUNT(*) AS count FROM outfit_ratings WHERE outfit_id=?",
-
-                (outfit["id"],),
-
-            ).fetchone()
-
-            my_rating = conn.execute(
-
-                "SELECT stars, comment FROM outfit_ratings WHERE outfit_id=? AND user_id=?",
-
-                (outfit["id"], viewer_id),
-
-            ).fetchone()
-
+        outfit_id = outfit["id"]
+        rating_info = ratings_by_outfit.get(outfit_id)
         cards.append({
-
             "outfit": outfit,
-
-            "items": items,
-
-            "average": rating_info["average"],
-
-            "rating_count": rating_info["count"],
-
-            "my_rating": my_rating,
-
+            "items": items_by_outfit.get(outfit_id, []),
+            "average": rating_info["average"] if rating_info else None,
+            "rating_count": rating_info["count"] if rating_info else 0,
+            "my_rating": my_ratings_by_outfit.get(outfit_id),
         })
 
     return cards
@@ -2869,7 +2892,7 @@ def room_detail(room_code):
 
         messages = conn.execute(
 
-            """SELECT m.message, m.created_at, u.user_id
+            """SELECT m.id, m.message, m.created_at, u.user_id
 
                FROM room_messages m
 
@@ -3271,80 +3294,53 @@ def room_detail(room_code):
 
 
 
-    let latestMessageId = 0;
-
-
+    let latestMessageId = {{ messages[-1]['id'] if messages else 0 }};
+    let loadingMessages = false;
 
     async function loadMessages() {
+      if (loadingMessages) return;
+      loadingMessages = true;
 
       try {
-
-        const response = await fetch(
-
-          "{{ url_for('room_messages', room_code=room['room_code']) }}"
-
+        const url = new URL(
+          "{{ url_for('room_messages', room_code=room['room_code']) }}",
+          window.location.origin
         );
+        url.searchParams.set("after_id", String(latestMessageId));
 
-
-
+        const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) return;
-
-
 
         const data = await response.json();
 
-
-
-        chatBox.replaceChildren();
-
-
-
         for (const msg of data.messages) {
-
           const wrapper = document.createElement("div");
-
           wrapper.style.marginBottom = "12px";
 
-
-
           const name = document.createElement("b");
-
           name.textContent = msg.user_id + " ";
 
-
-
           const time = document.createElement("span");
-
           time.className = "muted";
-
           time.textContent = msg.created_at;
 
-
-
           const content = document.createElement("div");
-
           content.style.overflowWrap = "anywhere";
-
           content.textContent = msg.message;
 
-
-
           wrapper.append(name, time, content);
-
           chatBox.appendChild(wrapper);
-
+          latestMessageId = Math.max(latestMessageId, Number(msg.id));
         }
 
-
-
-        chatBox.scrollTop = chatBox.scrollHeight;
-
+        if (data.messages.length) {
+          chatBox.scrollTop = chatBox.scrollHeight;
+        }
       } catch (error) {
-
         chatStatus.textContent = "メッセージを取得できませんでした。";
-
+      } finally {
+        loadingMessages = false;
       }
-
     }
 
 
@@ -3407,9 +3403,9 @@ def room_detail(room_code):
 
 
 
-    loadMessages();
-
-    setInterval(loadMessages, 3000);
+    setInterval(() => {
+      if (!document.hidden) loadMessages();
+    }, 8000);
 
     </script>
 
@@ -3499,24 +3495,18 @@ def room_messages(room_code):
 
 
 
+    after_id = request.args.get("after_id", default=0, type=int)
+    after_id = max(after_id or 0, 0)
+
     with connect_db() as conn:
-
         messages = conn.execute(
-
             """SELECT m.id, m.message, m.created_at, u.user_id
-
                FROM room_messages m
-
                JOIN users u ON u.id=m.user_id
-
-               WHERE m.room_code=?
-
-               ORDER BY m.id DESC
-
+               WHERE m.room_code=? AND m.id>?
+               ORDER BY m.id ASC
                LIMIT 100""",
-
-            (room_code,),
-
+            (room_code, after_id),
         ).fetchall()
 
 
@@ -3537,7 +3527,7 @@ def room_messages(room_code):
 
             }
 
-            for msg in reversed(messages)
+            for msg in messages
 
         ]
 
@@ -3593,9 +3583,14 @@ with connect_db() as conn:
 
 
 
-    conn.execute("""CREATE TABLE IF NOT EXISTS room_messages (
+    message_id_column = (
+        "id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY"
+        if USE_EXTERNAL_DB
+        else "id INTEGER PRIMARY KEY AUTOINCREMENT"
+    )
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS room_messages (
 
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    {message_id_column},
 
     room_code TEXT NOT NULL,
 
@@ -3610,6 +3605,37 @@ with connect_db() as conn:
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 
 )""")
+
+
+    if USE_EXTERNAL_DB:
+        conn.execute("""CREATE TABLE IF NOT EXISTS photo_reactions (
+            id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+            item_id TEXT NOT NULL REFERENCES clothing_items(id) ON DELETE CASCADE,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            reaction_type TEXT NOT NULL DEFAULT '❤',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(item_id, user_id)
+        )""")
+    else:
+        conn.execute("""CREATE TABLE IF NOT EXISTS photo_reactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            reaction_type TEXT NOT NULL DEFAULT '❤',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(item_id, user_id),
+            FOREIGN KEY(item_id) REFERENCES clothing_items(id) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )""")
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_clothing_owner_created ON clothing_items(owner_id, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_outfits_owner_date ON outfits(owner_id, outfit_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_outfit_items_outfit_position ON outfit_items(outfit_id, position)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_outfit_ratings_outfit_user ON outfit_ratings(outfit_id, user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_room_members_user_room ON room_members(user_id, room_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_room_messages_room_id ON room_messages(room_code, id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_photo_reactions_item ON photo_reactions(item_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_photo_reactions_user_item ON photo_reactions(user_id, item_id)")
 
 
 
